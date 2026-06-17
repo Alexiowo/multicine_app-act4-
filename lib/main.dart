@@ -1,7 +1,22 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MulticineApp());
+}
+class ApiService {
+  static const String baseUrl = 'http://192.168.0.2:8000/api/cartelera';
+
+  static Future<List<dynamic>> getCartelera() async {
+    final response = await http.get(Uri.parse(baseUrl));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Error al cargar cartelera');
+    }
+  }
 }
 
 class MulticineApp extends StatelessWidget {
@@ -119,33 +134,52 @@ class LoginScreen extends StatelessWidget {
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  String getImagePath(String imageName) {
+    return 'assets/movies/$imageName';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Cartelera'), centerTitle: true),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: const [
-          MovieCard(
-            title: 'Avengers: Endgame',
-            image: 'assets/movies/avengers.jpg',
+      body: FutureBuilder<List<dynamic>>(
+        future: ApiService.getCartelera(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            schedules: ['18:00 - Sala 1', '18:00 - Sala 2', '21:00 - Sala 3'],
-          ),
-          SizedBox(height: 20),
-          MovieCard(
-            title: 'Spider-Man No Way Home',
-            image: 'assets/movies/spiderman.jpg',
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
 
-            schedules: ['20:30 - Sala 2', '19:00 - Sala 1'],
-          ),
-          MovieCard(
-            title: 'Mario Bros Galaxy',
-            image: 'assets/movies/mario.jpg',
+          final peliculas = snapshot.data ?? [];
 
-            schedules: ['13:00 - Sala 1', '17:30 - Sala 3'],
-          ),
-        ],
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: peliculas.length,
+            itemBuilder: (context, index) {
+              final pelicula = peliculas[index];
+
+              final funciones = pelicula['funciones'] as List;
+
+              final schedules = funciones.map<String>((funcion) {
+                final hora = funcion['hora'].toString().substring(0, 5);
+                final sala = funcion['sala']['nombre_sala'];
+                return '$hora - $sala';
+              }).toList();
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: MovieCard(
+                  title: pelicula['titulo'],
+                  image: getImagePath(pelicula['imagen']),
+                  schedules: schedules,
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
